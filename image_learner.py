@@ -10,6 +10,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 from data import DataContainer, ImageDataset
+import metrics
 
 
 class BaseLearner(ABC):
@@ -59,9 +60,11 @@ class BaseLearner(ABC):
             validation_steps=self.data.validation.steps,
             epochs=epochs,
             callbacks=[
+                # metrics.F1Score(),
                 keras.callbacks.ModelCheckpoint(str(self.weights_path), save_best_only=True, save_weights_only=True),
                 keras.callbacks.ReduceLROnPlateau(factor=0.3, patience=reduce_lr_patience),
                 keras.callbacks.EarlyStopping(patience=early_stopping_patience, restore_best_weights=True),
+                keras.callbacks.TensorBoard(),
             ],
             verbose=1,
         )
@@ -132,17 +135,19 @@ class BaseLearner(ABC):
 
 class ImageLearner(BaseLearner):
 
-    def __init__(self,
-                 model_path: Path,
-                 data: DataContainer,
-                 base_model: Any,
-                 input_shape: Tuple[int, int, int],
-                 dropout: float = 0.0,
-                 l1: float = 1e-8,
-                 l2: float = 1e-8,
-                 override: bool = False,
-                 load: bool = True
-                 ) -> None:
+    def __init__(
+            self,
+            model_path: Path,
+            data: DataContainer,
+            base_model: Any,
+            input_shape: Tuple[int, int, int],
+            activation: Any,
+            dropout: float = 0.0,
+            l1: float = 3e-6,
+            l2: float = 3e-5,
+            override: bool = False,
+            load: bool = True
+    ) -> None:
         super().__init__(model_path, data)
         self.n_classes = data.train.n_classes
         self.input_shape = input_shape
@@ -162,7 +167,7 @@ class ImageLearner(BaseLearner):
         x = keras.layers.Dense(
             self.n_classes,
             kernel_regularizer=keras.regularizers.l1_l2(l1, l2),
-            activation=keras.activations.sigmoid,
+            activation=activation,
         )(x)
 
         self.model = keras.Model(inputs=self.base_model.inputs, outputs=x)
@@ -173,6 +178,7 @@ class ImageLearner(BaseLearner):
                 self.load()
             elif override:
                 try:
+                    print(f"Removing existing model in '{model_path}'")
                     shutil.rmtree(str(model_path))
                 except OSError as err:
                     print(f"Error while deleting {model_path} directory. {err}")

@@ -58,10 +58,6 @@ class ImageDataset:
         labels = df[label_col].values if label_col else np.empty((1, 1))
         return self._build(df[path_col].values, labels)
 
-    def with_label_map(self, label_map: Dict[str, int]) -> 'ImageDataset':
-        self.label_map = label_map
-        return self
-
     def _build(self, x: np.ndarray, y: np.ndarray) -> 'ImageDataset':
         self.x = x
         self.y = y
@@ -69,14 +65,13 @@ class ImageDataset:
         self.classes = np.unique(y)
         self.n_classes = len(self.classes)
         self.steps = math.ceil(self.length / self.config.batch_size)
-        self.label_map = self.label_map or {value: key for key, value in dict(enumerate(np.unique(self.y))).items()}
 
         image_ds = tf.data.Dataset.from_tensor_slices(x)
 
         for fun in self.config.preprocess_pipeline:
             image_ds = image_ds.map(fun, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-        label_ds = tf.data.Dataset.from_tensor_slices(np.asarray([self.label_map[label] for label in self.y]))
+        label_ds = tf.data.Dataset.from_tensor_slices(y.astype(float))
         dataset = tf.data.Dataset.zip((image_ds, label_ds))
 
         if self.config.shuffle:
@@ -87,8 +82,6 @@ class ImageDataset:
         return self
 
     def show(self, cols: int = 8, batches: int = 1) -> None:
-        labels = {key: value for key, value in enumerate(self.label_map)}
-
         if cols >= self.config.batch_size * batches:
             cols = self.config.batch_size * batches
             rows = 1
@@ -101,5 +94,5 @@ class ImageDataset:
                 idx = (i // cols, i % cols) if rows > 1 else i % cols
                 ax[idx].axis("off")
                 ax[idx].imshow(x)
-                ax[idx].set_title(f"{y} :: {labels[y]}")
+                ax[idx].set_title(f"{y} ::")
                 i += 1
