@@ -1,7 +1,7 @@
 import shutil
 from abc import ABC
 from pathlib import Path
-from typing import Tuple, Any, List
+from typing import Tuple, Any, List, Optional, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +10,6 @@ import tensorflow as tf
 from tensorflow import keras
 
 from data import DataContainer, ImageDataset
-import metrics
 
 
 class BaseLearner(ABC):
@@ -46,10 +45,10 @@ class BaseLearner(ABC):
         raise NotImplementedError()
 
     def auto_train(self, epochs: int, easing_epochs: int, optimizer: Any, lr: float, loss: Any,
-                   metrics: List[Any]) -> None:
+                   metrics: List[Any], class_weight: Optional[Dict[str, str]] = None) -> None:
         raise NotImplementedError()
 
-    def train(self, epochs: int) -> None:
+    def train(self, epochs: int, class_weight: Optional[Dict[str, str]] = None) -> None:
         reduce_lr_patience = max(2, epochs // 3)
         early_stopping_patience = reduce_lr_patience * 2
 
@@ -59,6 +58,7 @@ class BaseLearner(ABC):
             validation_data=self.data.validation.data,
             validation_steps=self.data.validation.steps,
             epochs=epochs,
+            class_weight=class_weight,
             callbacks=[
                 # metrics.F1Score(),
                 keras.callbacks.ModelCheckpoint(str(self.weights_path), save_best_only=True, save_weights_only=True),
@@ -207,7 +207,7 @@ class ImageLearner(BaseLearner):
             layer.trainable = True
 
     def auto_train(self, epochs: int, easing_epochs: int, optimizer: Any, lr: float, loss: Any,
-                   metrics: List[Any]) -> None:
+                   metrics: List[Any], class_weight: Optional[Dict[str, str]] = None) -> None:
         if easing_epochs:
             self.freeze()
             self.compile(optimizer=optimizer, lr=lr, loss=loss, metrics=metrics)
@@ -221,7 +221,7 @@ class ImageLearner(BaseLearner):
         self.compile(optimizer=optimizer, lr=lr, loss=loss, metrics=metrics)
 
         print("Starting model training")
-        self.train(epochs)
+        self.train(epochs, class_weight)
         self.load(weights_only=True)
         print("Model training completed")
 
