@@ -45,12 +45,21 @@ class BaseLearner(ABC):
         raise NotImplementedError()
 
     def auto_train(self, epochs: int, easing_epochs: int, optimizer: Any, lr: float, loss: Any,
-                   metrics: List[Any], class_weight: Optional[Dict[str, str]] = None) -> None:
+                   metrics: List[Any], class_weight: Optional[Dict[str, str]] = None,
+                   callbacks: List[Any] = []) -> None:
         raise NotImplementedError()
 
-    def train(self, epochs: int, class_weight: Optional[Dict[str, str]] = None) -> None:
+    def train(self, epochs: int, class_weight: Optional[Dict[str, str]] = None,
+              callbacks: List[keras.callbacks.Callback] = []) -> None:
         reduce_lr_patience = max(2, epochs // 3)
         early_stopping_patience = reduce_lr_patience * 2
+
+        train_callbacks = [
+            keras.callbacks.ModelCheckpoint(str(self.weights_path), save_best_only=True, save_weights_only=True),
+            keras.callbacks.ReduceLROnPlateau(factor=0.3, patience=reduce_lr_patience),
+            keras.callbacks.EarlyStopping(patience=early_stopping_patience, restore_best_weights=True),
+        ]
+        train_callbacks += callbacks
 
         self.history = self.model.fit(
             x=self.data.train.data,
@@ -59,13 +68,7 @@ class BaseLearner(ABC):
             validation_steps=self.data.validation.steps,
             epochs=epochs,
             class_weight=class_weight,
-            callbacks=[
-                # metrics.F1Score(),
-                keras.callbacks.ModelCheckpoint(str(self.weights_path), save_best_only=True, save_weights_only=True),
-                keras.callbacks.ReduceLROnPlateau(factor=0.3, patience=reduce_lr_patience),
-                keras.callbacks.EarlyStopping(patience=early_stopping_patience, restore_best_weights=True),
-                keras.callbacks.TensorBoard(),
-            ],
+            callbacks=train_callbacks,
             verbose=1,
         )
 
@@ -207,7 +210,8 @@ class ImageLearner(BaseLearner):
             layer.trainable = True
 
     def auto_train(self, epochs: int, easing_epochs: int, optimizer: Any, lr: float, loss: Any,
-                   metrics: List[Any], class_weight: Optional[Dict[str, str]] = None) -> None:
+                   metrics: List[Any], class_weight: Optional[Dict[str, str]] = None,
+                   callbacks: List[Any] = []) -> None:
         if easing_epochs:
             self.freeze()
             self.compile(optimizer=optimizer, lr=lr, loss=loss, metrics=metrics)
@@ -221,7 +225,7 @@ class ImageLearner(BaseLearner):
         self.compile(optimizer=optimizer, lr=lr, loss=loss, metrics=metrics)
 
         print("Starting model training")
-        self.train(epochs, class_weight)
+        self.train(epochs, class_weight, callbacks)
         self.load(weights_only=True)
         print("Model training completed")
 
